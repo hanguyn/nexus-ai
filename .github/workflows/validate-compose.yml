@@ -1,0 +1,13 @@
+name: Validate Compose
+on:
+  push:
+  pull_request:
+jobs:
+  compose-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare environment
+        run: cp .env.example .env
+      - name: Validate Compose model
+        run: docker compose config --quiet

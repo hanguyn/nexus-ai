@@ -1,0 +1,5 @@
+# Documentation address only. Replace with a reachable lab device.
+- targets: [192.0.2.10]
+  labels:
+    site: example
+    device_type: router

@@ -1,0 +1,9 @@
+# Documentation endpoints only. Replace with reachable lab targets.
+- targets: [https://example.com]
+  labels:
+    __param_module: https_2xx
+    check_type: https
+- targets: [192.0.2.20:443]
+  labels:
+    __param_module: tcp_connect
+    check_type: tcp
