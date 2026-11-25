@@ -1,5 +1,7 @@
 # NEXUS AI
 
+AI-Powered Infrastructure Monitoring and Intelligent Incident Diagnosis Platform.
+
 **Nghiên cứu và phát triển nền tảng giám sát hạ tầng CNTT tích hợp trí tuệ nhân tạo hỗ trợ phát hiện bất thường và chẩn đoán sự cố.**
 
 NEXUS AI hướng tới nền tảng tự lưu trữ giám sát mạng và hỗ trợ chẩn đoán. Bản hiện tại chỉ dựng monitoring foundation; backend, frontend, AI/RCA và tự động khắc phục đều chưa được triển khai.
