@@ -12,10 +12,10 @@ datasources:
     type: postgres
     access: proxy
     url: postgres:5432
-    user: ${POSTGRES_USER}
-    database: ${POSTGRES_DB}
+    user: $GF_DATABASE_USER
+    database: $GF_DATABASE_NAME
     secureJsonData:
-      password: ${POSTGRES_PASSWORD}
+      password: $GF_DATABASE_PASSWORD
     jsonData:
       postgresVersion: 1700
       sslmode: disable

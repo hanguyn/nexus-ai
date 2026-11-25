@@ -229,3 +229,12 @@ node_modules/
 coverage/
 .DS_Store
 Thumbs.db
+
+# Local service and database volumes
+pgdata/
+postgres_data/
+postgres-data/
+grafana_data/
+prometheus_data/
+alertmanager_data/
+.volumes/

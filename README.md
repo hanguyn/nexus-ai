@@ -1,71 +1,105 @@
 # NEXUS AI
 
-AI-Powered Infrastructure Monitoring and Intelligent Incident Diagnosis Platform.
+Self-hosted network monitoring, incident correlation, and evidence-based diagnosis. The dashboard covers device inventory, network health, anomalies, ranked root causes, an AI explanation assistant, and a simulated incident workflow.
 
-**Nghiên cứu và phát triển nền tảng giám sát hạ tầng CNTT tích hợp trí tuệ nhân tạo hỗ trợ phát hiện bất thường và chẩn đoán sự cố.**
+## Self-hosted quickstart
 
-NEXUS AI hướng tới nền tảng tự lưu trữ giám sát mạng và hỗ trợ chẩn đoán. Bản hiện tại chỉ dựng monitoring foundation; backend, frontend, AI/RCA và tự động khắc phục đều chưa được triển khai.
+Install Docker Engine or Docker Desktop with Compose v2. From the repository root, copy `.env.example` to `.env` and replace the sample PostgreSQL and Grafana credentials. Use `Copy-Item .env.example .env` on PowerShell or `cp .env.example .env` on Linux.
 
-## Kiến trúc và công nghệ
-
-Prometheus thu thập metrics từ chính nó, SNMP Exporter và Blackbox Exporter. Alertmanager nhận cảnh báo nhưng chưa gửi thông báo ra ngoài. Grafana được provision Prometheus và PostgreSQL datasource. PostgreSQL chỉ khởi tạo `pgcrypto` và schema `nexus`; metrics time-series thuộc Prometheus.
-
-Monitoring: Prometheus 3.5.0, Alertmanager 0.28.1, SNMP Exporter 0.26.0, Blackbox Exporter 0.27.0, Grafana 11.6.0. Database: PostgreSQL 17 Alpine. Stack tương lai: FastAPI, SQLAlchemy, Alembic, Pydantic; React, TypeScript, Vite, Tailwind; Pandas, NumPy, scikit-learn và adapter LLM. Deployment: Docker Compose; Nginx là dự kiến.
-
-```text
-Thiết bị --SNMP--> SNMP Exporter --scrape--> Prometheus --> Alertmanager
-Endpoint --probe--> Blackbox Exporter --scrape--> Prometheus
-Grafana --> Prometheus + PostgreSQL
-```
-
-## Cấu trúc
-
-`monitoring/` cấu hình Prometheus/exporters/Grafana/Alertmanager; `database/init/` SQL tối thiểu; `backend/`, `frontend/` ghi chú định hướng; `docs/` kiến trúc, triển khai, vận hành, bảo mật, lộ trình.
-
-## Cài đặt
-
-Cần Docker Engine và Compose v2. Linux cần `NET_RAW` cho ICMP (đã khai báo); một số môi trường Desktop/WSL không hỗ trợ ICMP.
-
-```bash
-cp .env.example .env
-```
-
-Đổi mật khẩu mẫu trong `.env` trước khi chạy.
-
-```bash
-docker compose config
+```sh
 docker compose up -d
 docker compose ps
+curl --fail http://127.0.0.1:8080/api/v1/simulator/scenarios
 ```
 
-| Dịch vụ | URL |
+Open [the NEXUS AI dashboard](http://127.0.0.1:8080/). The backend applies Alembic migrations at startup. After changing code, rebuild with `docker compose up -d --build`. If you use `-f deployment/docker-compose.yml` directly, pass `--env-file .env` from the repository root.
+
+| Service | Local address |
 |---|---|
+| Dashboard and API proxy | http://127.0.0.1:8080 |
+| FastAPI docs | http://127.0.0.1:8000/docs |
 | Prometheus | http://127.0.0.1:9090 |
 | Alertmanager | http://127.0.0.1:9093 |
-| Blackbox Exporter | http://127.0.0.1:9115 |
-| SNMP Exporter | http://127.0.0.1:9116 |
 | Grafana | http://127.0.0.1:3000 |
 
-PostgreSQL không publish cổng ra host. `docker compose down` giữ volumes; `docker compose down -v` xóa dữ liệu bền vững.
+Keep the root `.env` out of Git. PostgreSQL uses a private Docker network. `docker compose down` preserves data volumes.
 
-## Thêm mục tiêu
+## VPS deployment with Nginx and HTTPS
 
-Thêm thiết bị vào `monitoring/prometheus/targets/snmp_targets.yml`, thay địa chỉ tài liệu `192.0.2.10` bằng địa chỉ lab. Thêm endpoint vào `blackbox_targets.yml` với module `http_2xx`, `https_2xx`, `tcp_connect` hoặc `icmp`. Không cần sửa scrape job. Các địa chỉ ví dụ chỉ thuộc dải tài liệu, không phải thiết bị lab thật.
+1. Point a public DNS record such as `nexus.example.com` at your VPS. Allow inbound TCP 80 and 443. Install Docker and the Compose v2 plugin, then copy the project to the host.
+2. Create the root `.env` using the quickstart. Set `WEB_BIND_ADDRESS=127.0.0.1`, `WEB_PORT=8080`, `DEMO_READ_ONLY_MODE=true`, and `LLM_PROVIDER=mock` for a public demo. Run `docker compose up -d --build` and check the local URL.
+3. Install host Nginx and Certbot with its Nginx plugin using the [Certbot instructions for your OS](https://certbot.eff.org/instructions). On Debian or Ubuntu with the distribution packages, use `sudo apt install nginx certbot python3-certbot-nginx`. Add the configuration below to `/etc/nginx/conf.d/nexus-ai.conf` and replace the example domain.
 
-SNMP mẫu dùng v2c và community minh họa `CHANGE_ME_READ_ONLY`; phải thay trước khi thử thiết bị thật. v2c không mã hóa community; ưu tiên SNMP v3 auth/privacy trong production. Dùng credential chỉ đọc, giới hạn ACL để exporter được truy vấn UDP/161. Module/MIB phụ thuộc model; `if_mib` không hỗ trợ mọi thiết bị.
+```nginx
+server {
+    listen 80;
+    server_name nexus.example.com;
 
-## Vận hành, bảo mật và giới hạn
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120s;
+    }
+}
+```
 
-Kiểm tra bằng `docker compose ps`, `docker compose logs --tail=100 prometheus grafana postgres`, và Prometheus UI > Status > Targets. SNMP lỗi: kiểm tra ACL, community, version và module. ICMP lỗi: kiểm tra `NET_RAW` và runtime.
+4. Enable HTTPS and verify renewal and the dashboard.
 
-`.env` không được commit. Cổng quản trị chỉ bind loopback; không mở PostgreSQL, SNMP hay giao diện quản trị ra Internet. Truy cập từ xa qua WireGuard/Tailscale với ACL; không mở SSH/SNMP trực tiếp Internet. Đây là cấu hình lab/dev, chưa harden production. Chưa có user nghiệp vụ, dashboard giả lập, webhook, backend/frontend, AI, RCA, remediation tự động hay backup policy.
+```sh
+sudo nginx -t
+sudo systemctl reload nginx
+sudo certbot --nginx --redirect -d nexus.example.com
+sudo certbot renew --dry-run
+curl --fail https://nexus.example.com/api/v1/simulator/scenarios
+```
 
-## Lộ trình
+Public demo mode blocks inventory writes and external Alertmanager submissions through the web proxy. The internal Alertmanager receiver and simulator remain available. Use a dedicated demo deployment because the dashboard exposes shared incident data and visitors can trigger, recover, or reset shared demo scenarios. Keep FastAPI, Grafana, Prometheus, and the Docker proxy bound to loopback. Use a private deployment for real network data and credentials.
 
-1. Xác nhận monitoring với thiết bị thật.
-2. Backend modular monolith quản lý users, sites/devices, dependencies, alerts/incidents, timelines, RCA evidence, recommendations, audit logs.
-3. Frontend React/TypeScript.
-4. Tương quan quy tắc/RCA evidence trước anomaly detection và LLM adapter có giới hạn.
-5. Thêm servers, apps, logs, multi-site và VPS có reverse proxy/bảo mật.
+## Architecture
 
-Xem [architecture](docs/architecture.md), [deployment](docs/deployment.md), [operations](docs/operations.md), [security](docs/security.md), [roadmap](docs/roadmap.md).
+```mermaid
+flowchart LR
+    Browser --> HTTPS["Host Nginx and HTTPS on VPS"]
+    HTTPS --> Proxy["Docker Nginx proxy"]
+    Proxy --> UI["React dashboard"]
+    Proxy --> API["FastAPI modular backend"]
+    Devices["Monitored devices"] --> SNMP["SNMP Exporter"]
+    Targets["Probe targets"] --> Blackbox["Blackbox Exporter"]
+    Prometheus --> SNMP
+    Prometheus --> Blackbox
+    Prometheus --> Alertmanager
+    Alertmanager --> API
+    API -->|Inventory, incidents, evidence| PostgreSQL
+    API -->|Live metrics| Prometheus
+    API --> Simulator["Isolated demo simulator"]
+    Simulator -->|Alertmanager-formatted events| Pipeline["Correlation, RCA and AI explanation"]
+    API --> Pipeline
+    Pipeline --> PostgreSQL
+    Grafana --> Prometheus
+    Grafana --> PostgreSQL
+```
+
+## 5-minute live demo
+
+1. Open **Demo Simulator** and click **Seed topology**. Visit **Device Inventory** to see `HCM-HQ-Lab`, its five devices, and the directed dependency links. Triggering a scenario also seeds the topology if needed.
+2. Click **Simulate WAN Cascade Outage**. The dashboard opens the generated incident. Check the timeline for the WAN interface alert appearing 10 seconds ahead of downstream probe failures. Expand the RCA evidence for **ISP-WAN-Gateway**, then review the pre-generated assistant explanation and read-only checklist.
+3. Return to **Demo Simulator** and run **Simulate VPN Tunnel Down** or **Simulate Traffic Anomaly Spike**. In **Anomaly Detection**, review packet loss for the VPN and the Z-Score and Isolation Forest results for the router's Gi0/1 traffic spike.
+4. Click **Recover All**. Open the incident again to see its resolved alerts and recovery audit entry. Recovery checks use labeled synthetic telemetry, while live recovery checks query Prometheus.
+5. Click **Reset Demo Data** to clear simulator-created incidents, alerts, anomaly results, and their associated RCA and assistant records. The topology and live records remain available.
+
+| Simulator endpoint | Purpose |
+|---|---|
+| `GET /api/v1/simulator/scenarios` | List scenarios and their active incident IDs |
+| `POST /api/v1/simulator/seed-topology` | Seed or return the lab topology |
+| `POST /api/v1/simulator/trigger/{scenario}` | Run `wan_outage`, `vpn_tunnel_down`, or `bandwidth_spike` |
+| `POST /api/v1/simulator/recover/{scenario}` | Resolve and verify an active simulation |
+| `POST /api/v1/simulator/reset` | Clear demo records while preserving topology |
+
+## Monitoring operations
+
+Edit the file-discovery inventory under `monitoring/prometheus/targets/` to register lab SNMP and blackbox targets. Use read-only SNMP credentials and restrict access to the exporter. The included mock router has a Docker-only SNMP endpoint. Check scrape health in Prometheus and the provisioned network dashboard in Grafana.
+
+See [architecture](docs/architecture.md), [deployment](docs/deployment.md), [operations](docs/operations.md), and [security](docs/security.md) for additional notes.
